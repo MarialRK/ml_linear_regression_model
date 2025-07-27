@@ -2,108 +2,133 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-void main() => runApp(MyApp());
+void main() => runApp(CropYieldApp());
 
-class MyApp extends StatelessWidget {
+class CropYieldApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Crop Yield Predictor',
       theme: ThemeData(primarySwatch: Colors.green),
-      home: PredictionPage(),
+      home: CropYieldForm(),
     );
   }
 }
 
-class PredictionPage extends StatefulWidget {
+class CropYieldForm extends StatefulWidget {
   @override
-  _PredictionPageState createState() => _PredictionPageState();
+  _CropYieldFormState createState() => _CropYieldFormState();
 }
 
-class _PredictionPageState extends State<PredictionPage> {
+class _CropYieldFormState extends State<CropYieldForm> {
   final _formKey = GlobalKey<FormState>();
 
-  final TextEditingController yearController = TextEditingController();
-  final TextEditingController rainfallController = TextEditingController();
-  final TextEditingController pesticideController = TextEditingController();
-  final TextEditingController tempController = TextEditingController();
+  // ✅ Replace this with your actual API endpoint
+  final String apiUrl = "https://your-api-url.onrender.com/predict";
 
-  String result = '';
+  final TextEditingController rainfallController = TextEditingController();
+  final TextEditingController temperatureController = TextEditingController();
+  final TextEditingController pesticideController = TextEditingController();
+
+  String result = "";
 
   Future<void> predictYield() async {
-    final url = Uri.parse('https://ml-linear-regression-model.onrender.com/predict');
-
-    final Map<String, dynamic> data = {
-      "Item_Potatoes": 1,
-      "Area_United_Kingdom": 1,
-      "Item_Sweet_potatoes": 1,
-      "Area_Japan": 1,
-      "Year": int.parse(yearController.text),
-      "average_rain_fall_mm_per_year": double.parse(rainfallController.text),
-      "pesticides_tonnes": double.parse(pesticideController.text),
-      "avg_temp": double.parse(tempController.text),
-    };
+    if (!_formKey.currentState!.validate()) return;
 
     try {
+      final double rainfall = double.parse(rainfallController.text);
+      final double temperature = double.parse(temperatureController.text);
+      final double pesticide = double.parse(pesticideController.text);
+
       final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(data),
+        Uri.parse(apiUrl),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({
+          "rainfall": rainfall,
+          "temperature": temperature,
+          "pesticide": pesticide,
+        }),
       );
 
       if (response.statusCode == 200) {
+        final prediction = json.decode(response.body);
         setState(() {
-          result = 'Predicted Yield: ${jsonDecode(response.body)} hg/ha';
+          result =
+              "✅ Predicted Yield: ${prediction['prediction'].toStringAsFixed(2)} tons/ha";
         });
       } else {
         setState(() {
-          result = 'Error: ${response.statusCode} ${response.body}';
+          result = "❌ Error: ${response.reasonPhrase}";
         });
       }
     } catch (e) {
       setState(() {
-        result = 'Error: $e';
+        result = "❌ Exception: ${e.toString()}";
       });
     }
   }
 
   @override
+  void dispose() {
+    rainfallController.dispose();
+    temperatureController.dispose();
+    pesticideController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildTextField({
+    required String label,
+    required TextEditingController controller,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        border: OutlineInputBorder(),
+      ),
+      keyboardType: TextInputType.number,
+      validator: (value) {
+        if (value == null || value.isEmpty) return 'Field required';
+        if (double.tryParse(value) == null) return 'Enter valid number';
+        return null;
+      },
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Crop Yield Prediction')),
+      appBar: AppBar(title: Text('Crop Yield Predictor')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
-              TextFormField(
-                controller: yearController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Year'),
-              ),
-              TextFormField(
+              _buildTextField(
+                label: 'Rainfall (mm)',
                 controller: rainfallController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Average Rainfall (mm/year)'),
               ),
-              TextFormField(
+              SizedBox(height: 16),
+              _buildTextField(
+                label: 'Temperature (°C)',
+                controller: temperatureController,
+              ),
+              SizedBox(height: 16),
+              _buildTextField(
+                label: 'Pesticide Use (kg/ha)',
                 controller: pesticideController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Pesticides Used (tonnes)'),
               ),
-              TextFormField(
-                controller: tempController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'Average Temperature (°C)'),
-              ),
-              SizedBox(height: 20),
+              SizedBox(height: 24),
               ElevatedButton(
                 onPressed: predictYield,
                 child: Text('Predict'),
               ),
               SizedBox(height: 20),
-              Text(result),
+              Text(
+                result,
+                style: TextStyle(fontSize: 18, color: Colors.black87),
+              ),
             ],
           ),
         ),
